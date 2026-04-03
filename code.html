@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Spinning Orbit</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;600&display=swap');
+
+      body, html {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          overflow: hidden;
+          font-family: 'Poppins', sans-serif;
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          touch-action: none;
+          -webkit-touch-callout: none;
+      }
+
+      #game-world {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          opacity: 1;
+      }
+
+      #game-canvas {
+          display: block;
+          width: 100%;
+          height: 100%;
+      }
+
+
+      @media (prefers-reduced-motion: reduce) {
+          #game-world,
+          #title-overlay {
+              animation: none;
+              opacity: 1;
+          }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-world">
+      <canvas id="game-canvas"></canvas>
+    </div>
+
+    <script>
+      /**
+       * Spinning Orbit - A Hypnotic Loading Animation
+       *
+       * A minimalist visual experience featuring a rotating yellow square
+       * with yellow circles orbiting counter-clockwise around it on a
+       * clean white background. Pure visual meditation with no interaction.
+       */
+
+      async function run(mode) {
+        const gameWorld = document.getElementById('game-world');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Disable all interactivity
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        document.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+        document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+        document.addEventListener('gesturestart', (e) => e.preventDefault());
+        document.addEventListener('dblclick', (e) => e.preventDefault());
+        document.addEventListener('mousewheel', (e) => e.preventDefault(), { passive: false });
+
+        // Disable zoom on mobile
+        document.addEventListener(
+          'touchstart',
+          (e) => {
+            if (e.touches.length > 1) {
+              e.preventDefault();
+            }
+          },
+          { passive: false }
+        );
+
+        // Disable keyboard interactions
+        document.addEventListener('keydown', (e) => {
+          // Allow F12 and dev tools but block other keys
+          if (e.key !== 'F12' && e.key !== 'F11') {
+            e.preventDefault();
+          }
+        });
+
+        // Initialize display and resize handling
+        function resizeCanvas() {
+          canvas.width = gameWorld.clientWidth;
+          canvas.height = gameWorld.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Runtime state (not in gameConfig)
+        let squareRotation = 0; // Current rotation angle in degrees
+        let orbitAngle = 0; // Current orbit position in degrees
+        let lastTimestamp = 0;
+        let circleTrails = {}; // Store trail history for each circle
+        let startTime = null; // Track when animation started for fade-in
+        let shapeOpacity = 0; // Opacity for shapes (0 to 1)
+
+        // Center point of the animation (center of 720×1280 viewport)
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Show game parameters in both modes
+        lib.showGameParameters({
+          name: 'Animation Settings',
+          params: {
+            'Square Size': {
+              key: 'squareSize',
+              type: 'slider',
+              min: 40,
+              max: 150,
+              step: 5,
+            },
+            'Square Rotation Speed (°/sec)': {
+              key: 'squareRotationSpeed',
+              type: 'slider',
+              min: 30,
+              max: 360,
+              step: 10,
+            },
+            'Number of Circles': {
+              key: 'circleCount',
+              type: 'slider',
+              min: 1,
+              max: 8,
+              step: 1,
+            },
+            'Circle Size': {
+              key: 'circleSize',
+              type: 'slider',
+              min: 10,
+              max: 40,
+              step: 2,
+            },
+            'Orbit Radius': {
+              key: 'orbitRadius',
+              type: 'slider',
+              min: 60,
+              max: 200,
+              step: 10,
+            },
+            'Orbit Speed (seconds per revolution)': {
+              key: 'orbitSpeed',
+              type: 'slider',
+              min: 1,
+              max: 10,
+              step: 0.5,
+            },
+            'Trail Length': {
+              key: 'trailLength',
+              type: 'slider',
+              min: 5,
+              max: 100,
+              step: 1,
+            },
+            'Background Color': {
+              key: 'backgroundColor',
+              type: 'color',
+            },
+            'Shape Color': {
+              key: 'shapeColor',
+              type: 'color',
+            },
+          },
+        });
+
+        // Helper function to draw the rotating square
+        function drawSquare() {
+          const size = window.gameConfig.squareSize;
+          const color = window.gameConfig.shapeColor;
+
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          ctx.rotate((squareRotation * Math.PI) / 180);
+
+          ctx.fillStyle = color;
+          ctx.globalAlpha = shapeOpacity;
+          ctx.fillRect(-size / 2, -size / 2, size, size);
+
+          ctx.restore();
+        }
+
+        // Helper function to draw orbiting circles with trails
+        function drawOrbitingCircles() {
+          const count = window.gameConfig.circleCount;
+          const radius = window.gameConfig.orbitRadius;
+          const circleSize = window.gameConfig.circleSize;
+          const color = window.gameConfig.shapeColor;
+          const trailLength = window.gameConfig.trailLength;
+
+          // Calculate angle spacing between circles
+          const angleStep = 360 / count;
+
+          for (let i = 0; i < count; i++) {
+            // Initialize trail array for this circle if it doesn't exist
+            if (!circleTrails[i]) {
+              circleTrails[i] = [];
+            }
+
+            // Calculate position for this circle
+            // Counter-clockwise means we subtract the angle
+            const angle = orbitAngle - i * angleStep;
+            const angleRad = (angle * Math.PI) / 180;
+
+            const x = centerX + Math.cos(angleRad) * radius;
+            const y = centerY + Math.sin(angleRad) * radius;
+
+            // Add current position to trail
+            circleTrails[i].unshift({ x, y });
+
+            // Limit trail length
+            if (circleTrails[i].length > trailLength) {
+              circleTrails[i].pop();
+            }
+
+            // Draw trail
+            for (let j = 0; j < circleTrails[i].length; j++) {
+              const trailPoint = circleTrails[i][j];
+              // Calculate size: starts at circleSize, decreases to 0
+              const trailSize = (circleSize / 2) * (1 - j / trailLength);
+              // Calculate opacity: starts at full, fades out
+              const opacity = (1 - j / trailLength) * shapeOpacity;
+
+              ctx.fillStyle =
+                color.replace('#', '#') +
+                Math.floor(opacity * 255)
+                  .toString(16)
+                  .padStart(2, '0');
+              ctx.beginPath();
+              ctx.arc(trailPoint.x, trailPoint.y, Math.max(trailSize, 0.5), 0, Math.PI * 2);
+              ctx.fill();
+            }
+
+            // Draw circle (on top of trail)
+            ctx.fillStyle = color;
+            ctx.globalAlpha = shapeOpacity;
+            ctx.beginPath();
+            ctx.arc(x, y, circleSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+        }
+
+        // Game loop
+        function gameLoop(timestamp) {
+          // Initialize start time on first frame
+          if (startTime === null) {
+            startTime = timestamp;
+          }
+
+          // Calculate delta time in seconds
+          let deltaTime = 0;
+          if (lastTimestamp > 0) {
+            deltaTime = (timestamp - lastTimestamp) / 1000;
+            // Limit delta time to prevent large jumps
+            deltaTime = Math.min(deltaTime, 0.11);
+          }
+          lastTimestamp = timestamp;
+
+          // Calculate shape opacity (fade in over 1 second)
+          const elapsedTime = (timestamp - startTime) / 1000;
+          shapeOpacity = Math.min(elapsedTime / 1, 1); // 1 second fade-in
+
+          // Update rotation and orbit angles based on speeds
+          if (deltaTime > 0) {
+            // Update square rotation
+            const rotationSpeed = window.gameConfig.squareRotationSpeed;
+            squareRotation += rotationSpeed * deltaTime;
+            squareRotation = squareRotation % 360;
+
+            // Update orbit angle (clockwise - opposite to square rotation)
+            const orbitSpeed = window.gameConfig.orbitSpeed;
+            const degreesPerSecond = 360 / orbitSpeed;
+            orbitAngle -= degreesPerSecond * deltaTime;
+            orbitAngle = orbitAngle % 360;
+          }
+
+          // Clear canvas with background color
+          ctx.fillStyle = window.gameConfig.backgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Draw the animated elements
+          drawSquare();
+          drawOrbitingCircles();
+
+          requestAnimationFrame(gameLoop);
+        }
+
+        // Start the animation loop
+        requestAnimationFrame(gameLoop);
+      }
+    </script>
+  </body>
+</html>

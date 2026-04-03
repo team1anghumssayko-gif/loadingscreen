@@ -1,0 +1,11 @@
+{
+  "squareSize": 80,
+  "squareRotationSpeed": 140,
+  "circleCount": 1,
+  "circleSize": 32,
+  "orbitRadius": 120,
+  "orbitSpeed": 6,
+  "backgroundColor": "#FFFFFF",
+  "shapeColor": "#ffdc00",
+  "trailLength": 100
+}
